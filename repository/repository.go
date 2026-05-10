@@ -1,15 +1,98 @@
 package repository
 
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"time"
+)
+
 type TestRepository interface {
 	GetHello() string
+	Init(ctx context.Context) error
+	CreateDBTest(ctx context.Context, body string) (DBTestRecord, error)
+	GetDBTestByID(ctx context.Context, id int64) (DBTestRecord, error)
+	Close() error
 }
 
-type testRepository struct{}
+type DBTestRecord struct {
+	ID        int64     `json:"id"`
+	Body      string    `json:"body"`
+	CreatedAt time.Time `json:"created_at"`
+}
 
-func NewTestRepository() TestRepository {
-	return &testRepository{}
+type testRepository struct {
+	db *sql.DB
+}
+
+func NewTestRepository(db *sql.DB) TestRepository {
+	return &testRepository{db: db}
 }
 
 func (r *testRepository) GetHello() string {
-	return "Hello!"
+	return "Hello"
+}
+
+func (r *testRepository) Init(ctx context.Context) error {
+	queries := []string{
+		`CREATE TABLE IF NOT EXISTS users (
+			id BIGSERIAL PRIMARY KEY,
+			username VARCHAR(64) NOT NULL UNIQUE,
+			email VARCHAR(255) NOT NULL UNIQUE,
+			password_hash TEXT NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		);`,
+		`CREATE TABLE IF NOT EXISTS ads (
+			id BIGSERIAL PRIMARY KEY,
+			user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			title VARCHAR(255) NOT NULL,
+			description TEXT NOT NULL,
+			price NUMERIC(12, 2) NOT NULL CHECK (price >= 0),
+			status VARCHAR(16) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'sold')),
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		);`,
+		`CREATE TABLE IF NOT EXISTS db_test (
+			id BIGSERIAL PRIMARY KEY,
+			body TEXT NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		);`,
+	}
+
+	for _, q := range queries {
+		if _, err := r.db.ExecContext(ctx, q); err != nil {
+			return fmt.Errorf("init db: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (r *testRepository) CreateDBTest(ctx context.Context, body string) (DBTestRecord, error) {
+	const q = `INSERT INTO db_test (body) VALUES ($1) RETURNING id, body, created_at`
+
+	var record DBTestRecord
+	if err := r.db.QueryRowContext(ctx, q, body).Scan(&record.ID, &record.Body, &record.CreatedAt); err != nil {
+		return DBTestRecord{}, fmt.Errorf("create db_test record: %w", err)
+	}
+
+	return record, nil
+}
+
+func (r *testRepository) GetDBTestByID(ctx context.Context, id int64) (DBTestRecord, error) {
+	const q = `SELECT id, body, created_at FROM db_test WHERE id = $1`
+
+	var record DBTestRecord
+	if err := r.db.QueryRowContext(ctx, q, id).Scan(&record.ID, &record.Body, &record.CreatedAt); err != nil {
+		return DBTestRecord{}, fmt.Errorf("get db_test record: %w", err)
+	}
+
+	return record, nil
+}
+
+func (r *testRepository) Close() error {
+	if r.db == nil {
+		return nil
+	}
+	return r.db.Close()
 }
