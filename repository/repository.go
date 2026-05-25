@@ -30,7 +30,7 @@ func NewTestRepository(db *sql.DB) TestRepository {
 }
 
 func (r *testRepository) GetHello() string {
-	return "Hello"
+	return "Hello!"
 }
 
 func (r *testRepository) Init(ctx context.Context) error {

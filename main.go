@@ -17,7 +17,7 @@ import (
 )
 
 func main() {
-	dsn := getEnv("POSTGRES_DSN", "postgres://postgres:postgres@localhost:5432/mini_avito?sslmode=disable")
+	dsn := getEnv("POSTGRES_DSN", "postgres://postgres:postgres@127.0.0.1:5432/mini_avito?sslmode=disable")
 
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
